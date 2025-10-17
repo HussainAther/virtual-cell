@@ -1,15 +1,31 @@
+# dataset.py
+
 import torch
-from torch_geometric.data import Data
+from torch.utils.data import Dataset
+import numpy as np
 
-def load_synthetic_data():
-    num_nodes = 100
-    input_dim = 10
-    output_dim = 10
+class GeneGraphDataset(Dataset):
+    def __init__(self, control_path, perturbed_path, graph_path, transform=None):
+        self.control_data = np.load(control_path)  # shape: [N, G]
+        self.perturbed_data = np.load(perturbed_path)  # shape: [N, G]
+        self.graphs = np.load(graph_path, allow_pickle=True)  # List of N adjacency matrices or edge_index
+        self.transform = transform
 
-    x = torch.randn(num_nodes, input_dim)
-    y = torch.randn(num_nodes, output_dim)
+        # Precompute delta
+        self.delta = self.perturbed_data - self.control_data
+        self.num_samples = self.control_data.shape[0]
 
-    edge_index = torch.randint(0, num_nodes, (2, 500))
-    edge_weight = torch.ones(edge_index.size(1))
+    def __len__(self):
+        return self.num_samples
 
-    return Data(x=x, y=y, edge_index=edge_index, edge_weight=edge_weight)
+    def __getitem__(self, idx):
+        x = torch.tensor(self.control_data[idx], dtype=torch.float32)  # input: control expression
+        y = torch.tensor(self.delta[idx], dtype=torch.float32)  # target: delta expression
+        adjacency = torch.tensor(self.graphs[idx], dtype=torch.float32)  # could be edge_index too
+
+        if self.transform:
+            x = self.transform(x)
+            y = self.transform(y)
+
+        return x, adjacency, y
+
